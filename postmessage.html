@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="en">
+<head>
+<title>PostMessage POC builder</title>
+<link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css" integrity="sha384-JcKb8q3iqJ61gNV9KGb8thSsNjpSL0n8PARn9HuZOnIxN0hoP+VmmDGMN5t9UJ0Z" crossorigin="anonymous">
+<script>
+
+var config = {}
+
+// Config
+function parseConfig() {
+ var decoded = atob(document.location.hash.substr(1));
+ try {
+  config = JSON.parse(decoded);
+  
+  if(config.url.indexOf('http') !== 0) { config.url = ""; }
+
+  document.forms.settings.iframe.checked = config.iframe ? "checked" : "";
+  document.forms.settings.url.value = config.url;
+  document.forms.settings.payload.value = config.payload;
+  document.forms.settings.json.checked = config.json ? "checked" : "";
+  document.forms.settings.maxmessages.value = config.maxmessages;
+  document.forms.settings.autosend.checked = config.autosend ? "checked" : "";
+  if(config.iframe) {
+    ifr = document.getElementById('target') || document.createElement("iframe");
+    ifr.src = config.url;
+    ifr.id = "target";
+    ifr.width="100%";
+    ifr.height="600px";
+    ifr.addEventListener("load", sendMessage);
+    document.getElementById('poc').appendChild(ifr);
+  } else {
+    document.getElementById('poc').innerHTML = '<button id="openW" class="btn btn-light">Wait or click here</button>';
+    document.getElementById("openW").addEventListener('click', openWindow);
+    if(config.autosend) setTimeout(openWindow, 1000);
+  }
+  url = new URL(config.url);
+  document.getElementById("url").textContent = url.hostname;
+ } catch(e) {
+  console.log(e);
+ }
+}
+
+function saveConfig() {
+  config = {
+   'iframe': document.forms.settings.iframe.checked,
+   'url': document.forms.settings.url.value,
+   'payload': document.forms.settings.payload.value,
+   'json': document.forms.settings.json.checked,
+   'maxmessages': document.forms.settings.maxmessages.value,
+   'autosend': document.forms.settings.autosend.checked
+  }
+  history.replaceState(undefined, undefined, '#'+btoa(JSON.stringify(config)));
+  //window.location.hash = btoa(JSON.stringify(config));
+  parseConfig();
+}
+
+messages_sent = 0;
+function sendMessage() {
+
+  // perform a basic security check to avoid opening my own domain up as a a target:
+  if(decodeURI(config.url.toLowerCase()).indexOf("honoki.net")>-1) throw new Error("boo");
+
+  target = config.iframe ? document.getElementById("target").contentWindow : vWin;
+  if(messages_sent <= config.maxmessages) {
+    console.log("sending message...");
+    payload = config.json ? JSON.parse(config.payload) : config.payload
+    target.postMessage(payload, "*");
+    messages_sent += 1;
+  }
+}
+
+function openWindow() {
+  messages_sent = 0;
+  vWin = window.open(config.url);
+  setInterval(sendMessage, 1000);
+}
+
+window.addEventListener("message",function(e) {
+  var text = document.createTextNode(JSON.stringify(e.data));
+  var p = document.createElement('p'); 
+  p.appendChild(text);
+  document.getElementById('messages').innerHTML += p.innerHTML;
+});
+</script>
+</head>
+
+<body onload="parseConfig();">
+
+<div class="container">
+<br/>
+<h2>PostMessage POC Builder</h2>
+<p>
+This is a PoC to demonstrate a <code>postMessage</code> vulnerability on <code id="url"><script>document.write(config.url);</script></code>.
+</p>
+<h2>Settings</h2>
+<pre>
+<form name="settings" onchange="saveConfig();">
+<input type="checkbox" name="iframe"/> Use iframe instead of <code>window.open</code><br />
+URL: <input type="text" placeholder="https://example.com" name="url" size="100"><br />
+Payload: <input type="text" placeholder='{"test":123}' width="200px" name="payload" size="100" /><br />
+<input type="checkbox" name="json"/> Send payload as JSON object<br />
+Max messages: <input type="text" placeholder='10' name="maxmessages" /><br />
+<input type="checkbox" name="autosend"/> Autosend payload<br />
+<button class="btn btn-info" onclick="sendMessage();return false;">Send message</button>
+</form>
+</pre>
+<hr />
+<p>Any <code>postMessage</code> data sent back to this page will be printed below:</p>
+<div class="alert alert-info" id="messages"></div>
+<div id="poc"></div>
+
+<div id="footer"><center><hr /><p class="small">Created with &hearts; by <a href="https://twitter.com/honoki">@honoki</a></p></center></div>
+</div>
+</body>
+
+</html>
