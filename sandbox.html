@@ -1,0 +1,8 @@
+<body>
+    The sandbox iframe will set the postmessage message.origin property to 'null'.
+    <iframe id="fra" src="" width="100%" height="100%" sandbox="allow-scripts allow-popups allow-popups-to-escape-sandbox"></iframe>
+    <script>
+    var page = location.hash.substring(1);
+    if (page) document.getElementById('fra').src = page;
+    </script>
+    </body>

@@ -1,3 +1,4 @@
+
 <!doctype html>
 <html lang="en">
 <head>
@@ -7,17 +8,34 @@
 
 var config = {}
 
+function addPayloadField(value) {
+  if(!value) value = "";
+  value = value.replaceAll("\"", "&quot;");
+  document.getElementById('payloads').insertAdjacentHTML("beforeend",`<div class="input-group mb-3">
+    <input type="text" class="form-control" placeholder="{}" width="200px" name="payload" size="100" value="${value}"/>
+    <div class="input-group-append">
+    <button class="btn btn-outline-secondary" type="button" onclick="this.parentElement.parentElement.remove();saveConfig();return false;">Delete</button>
+    <button class="btn btn-outline-primary" type="button" onclick="sendMessage(this.parentElement.previousElementSibling.value);return false;">Send</button>
+    </div>
+</div>`);
+}
+
 // Config
 function parseConfig() {
  var decoded = atob(document.location.hash.substr(1));
  try {
   config = JSON.parse(decoded);
-  
+console.log(config);  
   if(config.url.indexOf('http') !== 0) { config.url = ""; }
 
   document.forms.settings.iframe.checked = config.iframe ? "checked" : "";
   document.forms.settings.url.value = config.url;
-  document.forms.settings.payload.value = config.payload;
+  // add the right number of payloads to send:
+  document.getElementById('payloads').innerHTML = '';
+  for(i in config.payloads) {
+    addPayloadField(escapeHTML(config.payloads[i]));
+  }
+  document.forms.settings.payload0.value = config.payload0;
   document.forms.settings.json.checked = config.json ? "checked" : "";
   document.forms.settings.maxmessages.value = config.maxmessages;
   document.forms.settings.autosend.checked = config.autosend ? "checked" : "";
@@ -27,8 +45,8 @@ function parseConfig() {
     ifr.id = "target";
     ifr.width="100%";
     ifr.height="600px";
-    ifr.addEventListener("load", sendMessage);
     document.getElementById('poc').appendChild(ifr);
+    if(config.autosend) ifr.addEventListener("load", function(){setInterval(function() {sendMessage(); }, 2000)});
   } else {
     document.getElementById('poc').innerHTML = '<button id="openW" class="btn btn-light">Wait or click here</button>';
     document.getElementById("openW").addEventListener('click', openWindow);
@@ -45,18 +63,30 @@ function saveConfig() {
   config = {
    'iframe': document.forms.settings.iframe.checked,
    'url': document.forms.settings.url.value,
-   'payload': document.forms.settings.payload.value,
+   'payload0': document.forms.settings.payload0.value,
    'json': document.forms.settings.json.checked,
    'maxmessages': document.forms.settings.maxmessages.value,
    'autosend': document.forms.settings.autosend.checked
   }
+  // check if there are many payloads or just the one
+  if(document.forms.settings.payload && Object.keys(document.forms.settings.payload).length > 0) {
+   config['payloads'] = Object.values(document.forms.settings.payload).map(k => k.value);
+  } else if (document.forms.settings.payload) {
+   config['payloads'] = [document.forms.settings.payload.value];
+  }
+
   history.replaceState(undefined, undefined, '#'+btoa(JSON.stringify(config)));
   //window.location.hash = btoa(JSON.stringify(config));
   parseConfig();
 }
 
 messages_sent = 0;
-function sendMessage() {
+message_index = 0;
+function sendMessage(message) {
+  console.log(message);
+  messages = [config.payload0].concat(config.payloads);
+
+  if(!message) message = messages[message_index++ % messages.length];
 
   // perform a basic security check to avoid opening my own domain up as a a target:
   if(decodeURI(config.url.toLowerCase()).indexOf("honoki.net")>-1) throw new Error("boo");
@@ -64,7 +94,7 @@ function sendMessage() {
   target = config.iframe ? document.getElementById("target").contentWindow : vWin;
   if(messages_sent <= config.maxmessages) {
     console.log("sending message...");
-    payload = config.json ? JSON.parse(config.payload) : config.payload
+    payload = config.json ? JSON.parse(message) : message
     target.postMessage(payload, "*");
     messages_sent += 1;
   }
@@ -72,15 +102,20 @@ function sendMessage() {
 
 function openWindow() {
   messages_sent = 0;
+  message_index = 0;
   vWin = window.open(config.url);
-  setInterval(sendMessage, 1000);
+  setInterval(function() { sendMessage() }, 1000);
+}
+
+function escapeHTML(dangerous) {
+  var text = document.createTextNode(dangerous);
+  var p = document.createElement('p'); 
+  p.appendChild(text);
+  return p.innerHTML;  
 }
 
 window.addEventListener("message",function(e) {
-  var text = document.createTextNode(JSON.stringify(e.data));
-  var p = document.createElement('p'); 
-  p.appendChild(text);
-  document.getElementById('messages').innerHTML += p.innerHTML;
+  document.getElementById('messages').innerHTML += escapeHTML(JSON.stringify(e.data))+"<br />";
 });
 </script>
 </head>
@@ -97,19 +132,29 @@ This is a PoC to demonstrate a <code>postMessage</code> vulnerability on <code i
 <pre>
 <form name="settings" onchange="saveConfig();">
 <input type="checkbox" name="iframe"/> Use iframe instead of <code>window.open</code><br />
-URL: <input type="text" placeholder="https://example.com" name="url" size="100"><br />
-Payload: <input type="text" placeholder='{"test":123}' width="200px" name="payload" size="100" /><br />
+URL: <input class="form-control" type="text" placeholder="https://example.com" name="url" size="100"><br />
+Payload(s): 
+<div class="input-group mb-3">
+<input type="text" class="form-control" placeholder='{"test":123}' width="200px" name="payload0" size="100" />
+<div class="input-group-append">
+<button class="btn btn-outline-primary" type="button" onclick="sendMessage(this.parentElement.previousElementSibling.value);return false;">Send</button>
+</div>
+</div>
+<div id="payloads">
+</div>
+<button class="btn btn-light btn-small" onclick="addPayloadField();return false;">+ add another payload</button>
+<br />
 <input type="checkbox" name="json"/> Send payload as JSON object<br />
 Max messages: <input type="text" placeholder='10' name="maxmessages" /><br />
-<input type="checkbox" name="autosend"/> Autosend payload<br />
-<button class="btn btn-info" onclick="sendMessage();return false;">Send message</button>
+<input type="checkbox" name="autosend"/> Autosend payload(s)<br />
 </form>
 </pre>
 <hr />
 <p>Any <code>postMessage</code> data sent back to this page will be printed below:</p>
 <div class="alert alert-info" id="messages"></div>
 <div id="poc"></div>
-
+<hr />
+<span class="small"><a target="_blank" href="sandbox.html#" onclick="this.href += window.location">Open this POC in a sandboxed iframe</a></span>
 <div id="footer"><center><hr /><p class="small">Created with &hearts; by <a href="https://twitter.com/honoki">@honoki</a></p></center></div>
 </div>
 </body>
