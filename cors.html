@@ -100,12 +100,32 @@ function sendCORS(e) {
   try {
     var xhttp = new XMLHttpRequest();
     xhttp.onreadystatechange = function() {
-      if (this.readyState == 4 && this.status == 200) {
-        document.getElementById("stolen-info").innerHTML = htmlEntities(this.responseText);
+      // response headers received
+      if (this.readyState == 2) {
+        if(document.getElementById("stolen-info").innerText == "Loading...") document.getElementById("stolen-info").innerHTML = "";
+        var headers = this.getAllResponseHeaders();
+        var headerArray = headers.split('\r\n');
+        var headerObj = {};
+        for (var i = 0; i < headerArray.length; i++) {
+          var header = headerArray[i].split(': ');
+          if (header.length > 1) {
+            headerObj[header[0]] = header[1];
+          }
+        }
+        document.getElementById("stolen-info").innerHTML += "<strong>Response Headers:</strong><br>" + htmlEntities(JSON.stringify(headerObj, null, 2))+"<br>";
       } else if (this.readyState == 4) {
-        document.getElementById("stolen-info").classList.remove("alert-info");
-        document.getElementById("stolen-info").classList.add("alert-danger");
-        document.getElementById("stolen-info").innerHTML = (this.statusText.length>0 ? htmlEntities(this.statusText) : "(see console for details)");
+        if(document.getElementById("stolen-info").innerText == "Loading...") document.getElementById("stolen-info").innerHTML = "";
+        document.getElementById("stolen-info").innerHTML += "<strong>Response Body:</strong><br>" + htmlEntities(this.responseText);
+        if(this.status.toString().charAt(0) == "2") {
+          document.getElementById("stolen-info").classList.remove("alert-info","alert-danger","alert-warning");
+          document.getElementById("stolen-info").classList.add("alert-info");
+        } else {
+          document.getElementById("stolen-info").classList.remove("alert-info");
+          document.getElementById("stolen-info").classList.add("alert-danger");
+          if (this.responseText.length == 0) {
+            document.getElementById("stolen-info").innerHTML += "(no response body, see console for more details)";
+          }
+        }
       }
     };
     var method = config.post ? "POST" : "GET";
