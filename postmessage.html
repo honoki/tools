@@ -104,7 +104,7 @@ function openWindow() {
   messages_sent = 0;
   message_index = 0;
   vWin = window.open(config.url);
-  setInterval(function() { sendMessage() }, 1000);
+  if(config.autosend) setInterval(function() { sendMessage() }, 1000);
 }
 
 function escapeHTML(dangerous) {
